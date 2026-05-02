@@ -2,31 +2,65 @@
 
 import { useCity, type CityConfig, type ModeConfig } from "@/lib/cityContext";
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
 /**
  * Pill compacto con la ciudad+modo activos en el StatusBar. Click → menú
  * dropdown con todas las opciones (Mvd · Buses, CABA · Colectivos, CABA · Subte).
+ *
+ * El dropdown se renderiza vía Portal al `document.body` para escapar del
+ * `overflow-hidden` del layout (fullscreen sin scroll). Se posiciona con
+ * `position: fixed` calculando coords del button via `getBoundingClientRect`.
  *
  * Páginas city-aware leen `useCity()` y reaccionan al cambio.
  */
 export default function CitySelector() {
   const { city, mode, setCity, setMode, allCities } = useCity();
   const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
+  const [coords, setCoords] = useState<{ top: number; left: number } | null>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  // Calcular posición del dropdown debajo del botón al abrir.
+  useEffect(() => {
+    if (!open) return;
+    if (!buttonRef.current) return;
+    const rect = buttonRef.current.getBoundingClientRect();
+    setCoords({ top: rect.bottom + 4, left: rect.left });
+  }, [open]);
 
   // Click fuera cierra el menú.
   useEffect(() => {
     if (!open) return;
     const onDoc = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+      const target = e.target as Node;
+      if (buttonRef.current?.contains(target)) return;
+      if (menuRef.current?.contains(target)) return;
+      setOpen(false);
     };
     document.addEventListener("mousedown", onDoc);
     return () => document.removeEventListener("mousedown", onDoc);
   }, [open]);
 
+  // Cerrar con Escape.
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [open]);
+
   return (
-    <div className="relative" ref={ref}>
+    <>
       <button
+        ref={buttonRef}
         onClick={() => setOpen((v) => !v)}
         className="flex items-center gap-2 rounded-md border border-border bg-bg-subtle/50 px-2.5 py-1 text-[11px] font-semibold text-text hover:border-border-strong hover:bg-bg-subtle transition-all"
         title="Cambiar ciudad / modo"
@@ -53,8 +87,12 @@ export default function CitySelector() {
         </svg>
       </button>
 
-      {open && (
-        <div className="absolute left-0 top-full mt-1 z-50 min-w-[220px] rounded-lg border border-border bg-bg-card shadow-lg overflow-hidden">
+      {mounted && open && coords && createPortal(
+        <div
+          ref={menuRef}
+          className="fixed z-[9999] min-w-[220px] rounded-lg border border-border bg-bg-card shadow-lg overflow-hidden"
+          style={{ top: coords.top, left: coords.left }}
+        >
           {allCities.map((c) => (
             <CityRow
               key={c.id}
@@ -68,9 +106,10 @@ export default function CitySelector() {
               }}
             />
           ))}
-        </div>
+        </div>,
+        document.body
       )}
-    </div>
+    </>
   );
 }
 
