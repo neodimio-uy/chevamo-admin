@@ -33,15 +33,19 @@ export default function BusesPage() {
 
   const overrideMap = useMemo(() => {
     const m = new Map<string, (typeof overrides)[0]>();
-    for (const o of overrides) m.set(o.id, o);
+    const arr = Array.isArray(overrides) ? overrides : [];
+    for (const o of arr) {
+      if (o?.id) m.set(o.id, o);
+    }
     return m;
   }, [overrides]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return buses
+    const arr = Array.isArray(buses) ? buses : [];
+    return arr
       .filter((b) => {
-        const id = String(b.id);
+        const id = String(b?.id ?? "");
         if (showOnlyOverridden && !overrideMap.has(id)) return false;
         if (!q) return true;
         return (
