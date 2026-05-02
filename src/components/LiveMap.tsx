@@ -7,6 +7,7 @@ import {
   Marker,
   InfoWindow,
   useMap,
+  useApiIsLoaded,
 } from "@vis.gl/react-google-maps";
 import type { Bus, BusStop } from "@/lib/types";
 import { COMPANY_COLORS } from "@/lib/types";
@@ -79,6 +80,7 @@ function LiveMapInner({
   center = DEFAULT_CENTER,
   zoom = DEFAULT_ZOOM,
 }: LiveMapProps) {
+  const apiLoaded = useApiIsLoaded();
   const [selected, setSelected] = useState<SelectedFeature | null>(null);
 
   const filteredBuses = useMemo(() => {
@@ -125,93 +127,98 @@ function LiveMapInner({
       // mapa NO se reposiciona en cada render del padre. `key` fuerza re-mount
       // cuando cambia la ciudad (vía nuevo defaultCenter/defaultZoom).
     >
-      {/* Recorridos (shapes GTFS) */}
+      {/* Recorridos (shapes GTFS) — ShapePolyline guarda contra google undefined internamente vía useMap */}
       {shapes?.map((shape) => (
         <ShapePolyline key={`shape-${shape.shape_id}`} shape={shape} />
       ))}
 
-      {/* Paradas Mvd legacy */}
-      {showStops &&
-        stops.slice(0, 500).map((stop) => (
-          <Marker
-            key={`stop-${stop.id}`}
-            position={{
-              lat: stop.location.coordinates[1],
-              lng: stop.location.coordinates[0],
-            }}
-            icon={dotIcon("#94a3b8", 4)}
-            onClick={() => setSelected({ kind: "stop", stop })}
-          />
-        ))}
+      {/* Markers requieren google.maps.SymbolPath / Point — solo después de api loaded */}
+      {apiLoaded && (
+        <>
+          {/* Paradas Mvd legacy */}
+          {showStops &&
+            stops.slice(0, 500).map((stop) => (
+              <Marker
+                key={`stop-${stop.id}`}
+                position={{
+                  lat: stop.location.coordinates[1],
+                  lng: stop.location.coordinates[0],
+                }}
+                icon={dotIcon("#94a3b8", 4)}
+                onClick={() => setSelected({ kind: "stop", stop })}
+              />
+            ))}
 
-      {/* Paradas/estaciones GTFS multi-city */}
-      {showStops &&
-        visibleStops.map((s) => {
-          const arrivals = subteForecast
-            ? countSubteArrivalsAtStop(subteForecast, s)
-            : 0;
-          return (
+          {/* Paradas/estaciones GTFS multi-city */}
+          {showStops &&
+            visibleStops.map((s) => {
+              const arrivals = subteForecast
+                ? countSubteArrivalsAtStop(subteForecast, s)
+                : 0;
+              return (
+                <Marker
+                  key={`gtfs-${s.stop_id}`}
+                  position={{ lat: s.stop_lat, lng: s.stop_lon }}
+                  icon={dotIcon("#14b8a6", s.location_type === 1 ? 6 : 4)}
+                  onClick={() =>
+                    setSelected({ kind: "gtfs-stop", stop: s, arrivals })
+                  }
+                />
+              );
+            })}
+
+          {/* Vehicles multi-city */}
+          {filteredVehicles.map((v) => {
+            const lineLabel = v.trip?.routeShortName || v.displayLabel || "?";
+            return (
+              <Marker
+                key={`v-${v.id}`}
+                position={{ lat: v.position.lat, lng: v.position.lng }}
+                icon={busIcon("#475569")}
+                label={busLabel(lineLabel)}
+                title={`Línea ${lineLabel}`}
+                onClick={() => setSelected({ kind: "vehicle", vehicle: v })}
+              />
+            );
+          })}
+
+          {/* Community buses (violeta) */}
+          {communityBuses.map((cb) => (
             <Marker
-              key={`gtfs-${s.stop_id}`}
-              position={{ lat: s.stop_lat, lng: s.stop_lon }}
-              icon={dotIcon("#14b8a6", s.location_type === 1 ? 6 : 4)}
-              onClick={() =>
-                setSelected({ kind: "gtfs-stop", stop: s, arrivals })
-              }
+              key={`cb-${cb.id}`}
+              position={{ lat: cb.lat, lng: cb.lng }}
+              icon={dotIcon("#a855f7", 8)}
+              title={`Comunidad · Línea ${cb.line}`}
+              onClick={() => setSelected({ kind: "community", bus: cb })}
             />
-          );
-        })}
+          ))}
 
-      {/* Vehicles multi-city */}
-      {filteredVehicles.map((v) => {
-        const lineLabel = v.trip?.routeShortName || v.displayLabel || "?";
-        return (
-          <Marker
-            key={`v-${v.id}`}
-            position={{ lat: v.position.lat, lng: v.position.lng }}
-            icon={busIcon("#475569")}
-            label={busLabel(lineLabel)}
-            title={`Línea ${lineLabel}`}
-            onClick={() => setSelected({ kind: "vehicle", vehicle: v })}
-          />
-        );
-      })}
+          {/* Buses Mvd oficiales */}
+          {filteredBuses.map((bus) => {
+            const coords = bus.location?.coordinates;
+            if (!coords) return null;
+            const color = COMPANY_COLORS[bus.company] || "#64748b";
+            return (
+              <Marker
+                key={bus.id}
+                position={{ lat: coords[1], lng: coords[0] }}
+                icon={busIcon(color)}
+                label={busLabel(bus.line)}
+                title={`Línea ${bus.line} · ${bus.company}`}
+                onClick={() => setSelected({ kind: "bus", bus })}
+              />
+            );
+          })}
 
-      {/* Community buses (violeta) */}
-      {communityBuses.map((cb) => (
-        <Marker
-          key={`cb-${cb.id}`}
-          position={{ lat: cb.lat, lng: cb.lng }}
-          icon={dotIcon("#a855f7", 8)}
-          title={`Comunidad · Línea ${cb.line}`}
-          onClick={() => setSelected({ kind: "community", bus: cb })}
-        />
-      ))}
-
-      {/* Buses Mvd oficiales */}
-      {filteredBuses.map((bus) => {
-        const coords = bus.location?.coordinates;
-        if (!coords) return null;
-        const color = COMPANY_COLORS[bus.company] || "#64748b";
-        return (
-          <Marker
-            key={bus.id}
-            position={{ lat: coords[1], lng: coords[0] }}
-            icon={busIcon(color)}
-            label={busLabel(bus.line)}
-            title={`Línea ${bus.line} · ${bus.company}`}
-            onClick={() => setSelected({ kind: "bus", bus })}
-          />
-        );
-      })}
-
-      {selected && (
-        <InfoWindow
-          position={getSelectedPosition(selected)}
-          onCloseClick={() => setSelected(null)}
-        >
-          <SelectedPopup feature={selected} />
-        </InfoWindow>
+          {selected && (
+            <InfoWindow
+              position={getSelectedPosition(selected)}
+              onCloseClick={() => setSelected(null)}
+            >
+              <SelectedPopup feature={selected} />
+            </InfoWindow>
+          )}
+        </>
       )}
     </Map>
   );
@@ -400,7 +407,7 @@ function ShapePolyline({ shape }: { shape: GtfsShape }) {
 }
 
 function dotIcon(color: string, size: number): google.maps.Symbol | undefined {
-  if (typeof google === "undefined") return undefined;
+  if (typeof google === "undefined" || !google.maps) return undefined;
   return {
     path: google.maps.SymbolPath.CIRCLE,
     fillColor: color,
@@ -412,7 +419,7 @@ function dotIcon(color: string, size: number): google.maps.Symbol | undefined {
 }
 
 function busIcon(color: string): google.maps.Symbol | undefined {
-  if (typeof google === "undefined") return undefined;
+  if (typeof google === "undefined" || !google.maps) return undefined;
   return {
     path: "M -12,-9 L 12,-9 Q 16,-9 16,-5 L 16,5 Q 16,9 12,9 L -12,9 Q -16,9 -16,5 L -16,-5 Q -16,-9 -12,-9 Z",
     fillColor: color,
