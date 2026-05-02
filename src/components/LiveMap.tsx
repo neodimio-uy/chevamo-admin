@@ -83,7 +83,8 @@ export default function LiveMap({
   zoom = DEFAULT_ZOOM,
 }: LiveMapProps) {
   const filteredBuses = useMemo(() => {
-    return (buses ?? []).filter((b) => {
+    const arr = Array.isArray(buses) ? buses : [];
+    return arr.filter((b) => {
       if (lineFilter && b.line !== lineFilter) return false;
       if (companyFilter && b.company !== companyFilter) return false;
       return true;
@@ -91,7 +92,8 @@ export default function LiveMap({
   }, [buses, lineFilter, companyFilter]);
 
   const filteredVehicles = useMemo(() => {
-    return (vehicles ?? []).filter((v) => {
+    const arr = Array.isArray(vehicles) ? vehicles : [];
+    return arr.filter((v) => {
       const lineLabel = v.trip?.routeShortName || v.displayLabel || "";
       if (lineFilter && lineLabel !== lineFilter) return false;
       return true;
@@ -99,10 +101,11 @@ export default function LiveMap({
   }, [vehicles, lineFilter]);
 
   const visibleStops = useMemo(() => {
-    if (!gtfsStops) return [];
+    const arr = Array.isArray(gtfsStops) ? gtfsStops : [];
+    if (arr.length === 0) return [];
     const filtered = onlyParentStations
-      ? gtfsStops.filter((s) => s.location_type === 1)
-      : gtfsStops;
+      ? arr.filter((s) => s.location_type === 1)
+      : arr;
     return filtered.slice(0, 5000);
   }, [gtfsStops, onlyParentStations]);
 
