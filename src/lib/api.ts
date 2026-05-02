@@ -108,7 +108,12 @@ export async function getVehicles(
     zone: city.zone,
     mode,
   });
-  return fetchBackend(`/vehicles?${qs.toString()}`);
+  // El backend envuelve la respuesta como `{ vehicles: [...], cityId, mode,
+  // service, feedTimestamp }`. Extraemos el array.
+  const data = await fetchBackend<{ vehicles: TransitVehicle[] }>(
+    `/vehicles?${qs.toString()}`
+  );
+  return data.vehicles ?? [];
 }
 
 /**
