@@ -19,6 +19,13 @@ const DEFAULT_ZOOM = 12;
 
 const API_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
 
+/// Zoom mínimo para pintar paradas. 13 ~ barrios; 14 ~ pocas cuadras.
+const MIN_ZOOM_STOPS = 13;
+/// Zoom mínimo para pintar shapes (más caros que stops).
+const MIN_ZOOM_SHAPES = 12;
+/// Subte CABA tiene 16 shapes — render entero sin importar zoom.
+const SUBTE_ALWAYS_RENDER = true;
+
 interface LiveMapProps {
   // Legacy Mvd (feed IMM enriquecido)
   buses?: Bus[];
@@ -49,6 +56,40 @@ type SelectedFeature =
   | { kind: "community"; bus: CommunityBus }
   | { kind: "stop"; stop: BusStop }
   | { kind: "gtfs-stop"; stop: GtfsStop; arrivals: number };
+
+interface Viewport {
+  bounds: { north: number; south: number; east: number; west: number } | null;
+  zoom: number;
+}
+
+interface ShapeWithBbox {
+  shape: GtfsShape;
+  bbox: { north: number; south: number; east: number; west: number };
+}
+
+function shapeBbox(shape: GtfsShape): ShapeWithBbox["bbox"] {
+  let north = -90, south = 90, east = -180, west = 180;
+  for (const p of shape.points) {
+    if (p.length < 2) continue;
+    const [lat, lng] = p;
+    if (lat > north) north = lat;
+    if (lat < south) south = lat;
+    if (lng > east) east = lng;
+    if (lng < west) west = lng;
+  }
+  return { north, south, east, west };
+}
+
+function bboxIntersects(
+  a: { north: number; south: number; east: number; west: number },
+  b: { north: number; south: number; east: number; west: number }
+): boolean {
+  if (a.east < b.west) return false;
+  if (a.west > b.east) return false;
+  if (a.north < b.south) return false;
+  if (a.south > b.north) return false;
+  return true;
+}
 
 export default function LiveMap(props: LiveMapProps) {
   if (!API_KEY) {
@@ -82,6 +123,10 @@ function LiveMapInner({
 }: LiveMapProps) {
   const apiLoaded = useApiIsLoaded();
   const [selected, setSelected] = useState<SelectedFeature | null>(null);
+  const [viewport, setViewport] = useState<Viewport>({
+    bounds: null,
+    zoom: zoom,
+  });
 
   const filteredBuses = useMemo(() => {
     const arr = Array.isArray(buses) ? buses : [];
@@ -101,14 +146,56 @@ function LiveMapInner({
     });
   }, [vehicles, lineFilter]);
 
+  // Pre-compute bbox de cada shape (una sola vez por dataset).
+  const shapesIndexed = useMemo<ShapeWithBbox[]>(() => {
+    const arr = Array.isArray(shapes) ? shapes : [];
+    return arr.map((shape) => ({ shape, bbox: shapeBbox(shape) }));
+  }, [shapes]);
+
+  // Stops visibles por viewport+zoom (subte siempre muestra estaciones).
   const visibleStops = useMemo(() => {
     const arr = Array.isArray(gtfsStops) ? gtfsStops : [];
     if (arr.length === 0) return [];
-    const filtered = onlyParentStations
+    const baseFiltered = onlyParentStations
       ? arr.filter((s) => s.location_type === 1)
       : arr;
-    return filtered.slice(0, 5000);
-  }, [gtfsStops, onlyParentStations]);
+    if (onlyParentStations) return baseFiltered;
+    if (!viewport.bounds) return [];
+    if (viewport.zoom < MIN_ZOOM_STOPS) return [];
+    const b = viewport.bounds;
+    const out: GtfsStop[] = [];
+    for (const s of baseFiltered) {
+      if (
+        s.stop_lat <= b.north &&
+        s.stop_lat >= b.south &&
+        s.stop_lon <= b.east &&
+        s.stop_lon >= b.west
+      ) {
+        out.push(s);
+        if (out.length >= 1500) break;
+      }
+    }
+    return out;
+  }, [gtfsStops, onlyParentStations, viewport]);
+
+  // Shapes visibles por viewport+zoom (subte siempre).
+  const visibleShapes = useMemo(() => {
+    if (shapesIndexed.length === 0) return [];
+    if (onlyParentStations && SUBTE_ALWAYS_RENDER) {
+      return shapesIndexed.map((s) => s.shape);
+    }
+    if (!viewport.bounds) return [];
+    if (viewport.zoom < MIN_ZOOM_SHAPES) return [];
+    const b = viewport.bounds;
+    const out: GtfsShape[] = [];
+    for (const s of shapesIndexed) {
+      if (bboxIntersects(s.bbox, b)) {
+        out.push(s.shape);
+        if (out.length >= 800) break;
+      }
+    }
+    return out;
+  }, [shapesIndexed, viewport, onlyParentStations]);
 
   return (
     <Map
@@ -127,8 +214,10 @@ function LiveMapInner({
       // mapa NO se reposiciona en cada render del padre. `key` fuerza re-mount
       // cuando cambia la ciudad (vía nuevo defaultCenter/defaultZoom).
     >
-      {/* Recorridos (shapes GTFS) — ShapePolyline guarda contra google undefined internamente vía useMap */}
-      {shapes?.map((shape) => (
+      <ViewportTracker onChange={setViewport} />
+
+      {/* Recorridos (shapes GTFS) — filtrados por viewport+zoom */}
+      {visibleShapes.map((shape) => (
         <ShapePolyline key={`shape-${shape.shape_id}`} shape={shape} />
       ))}
 
@@ -381,6 +470,38 @@ function SelectedPopup({ feature }: { feature: SelectedFeature }) {
       );
     }
   }
+}
+
+/// Escucha movimientos del mapa (pan/zoom) y reporta el viewport actual.
+/// Usa el evento `idle` (después de gestos) — clave para no quemar CPU.
+function ViewportTracker({
+  onChange,
+}: {
+  onChange: (v: Viewport) => void;
+}) {
+  const map = useMap();
+  useEffect(() => {
+    if (!map) return;
+    const update = () => {
+      const b = map.getBounds();
+      const z = map.getZoom();
+      onChange({
+        bounds: b
+          ? {
+              north: b.getNorthEast().lat(),
+              south: b.getSouthWest().lat(),
+              east: b.getNorthEast().lng(),
+              west: b.getSouthWest().lng(),
+            }
+          : null,
+        zoom: typeof z === "number" ? z : DEFAULT_ZOOM,
+      });
+    };
+    update();
+    const idleListener = map.addListener("idle", update);
+    return () => idleListener.remove();
+  }, [map, onChange]);
+  return null;
 }
 
 /// Polyline que vive como side-effect en el mapa (Google Maps no expone un
