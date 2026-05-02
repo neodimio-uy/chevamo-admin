@@ -110,8 +110,9 @@ function LiveMapInner({
 
   return (
     <Map
-      center={{ lat: center[0], lng: center[1] }}
-      zoom={zoom}
+      key={`${center[0]},${center[1]},${zoom}`}
+      defaultCenter={{ lat: center[0], lng: center[1] }}
+      defaultZoom={zoom}
       className="h-full w-full overflow-hidden rounded-2xl"
       gestureHandling="greedy"
       disableDefaultUI={false}
@@ -120,6 +121,9 @@ function LiveMapInner({
       mapTypeControl={false}
       fullscreenControl={false}
       clickableIcons={false}
+      // defaultCenter/defaultZoom (uncontrolled): el user mueve libremente, el
+      // mapa NO se reposiciona en cada render del padre. `key` fuerza re-mount
+      // cuando cambia la ciudad (vía nuevo defaultCenter/defaultZoom).
     >
       {/* Recorridos (shapes GTFS) */}
       {shapes?.map((shape) => (
