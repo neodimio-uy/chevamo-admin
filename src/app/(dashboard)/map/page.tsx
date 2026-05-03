@@ -134,19 +134,18 @@ export default function MapPage() {
     return [];
   }, [gtfsIndex, isCabaSubte]);
 
-  // Mapping route_short_name → shapes. Para colectivos/buses, el LiveMap
-  // muestra shapes solo cuando user clickea una unidad (1-3 polylines).
-  // Si el operador filtra por línea en el input, el LiveMap recibe el filter
-  // via `lineFilter` y igual el click muestra el shape.
+  // Mapping de cualquier identificador de línea (route_id o route_short_name)
+  // → shapes. Lo indexamos doble para que el LiveMap pueda buscar por lo que
+  // tenga: GTFS-RT vehicles traen route_id; el feed legacy IMM trae route_short_name.
   const shapesByLineLabel = useMemo(() => {
     if (!gtfsIndex || isCabaSubte) return undefined;
     const result = new Map<string, typeof gtfsIndex.snapshot.shapes>();
     for (const [routeId, shapesArr] of gtfsIndex.shapesByRoute) {
-      const route = gtfsIndex.routesById.get(routeId);
-      const label = route?.route_short_name;
-      if (!label) continue;
-      const existing = result.get(label) ?? [];
-      result.set(label, [...existing, ...shapesArr]);
+      result.set(routeId, [...(result.get(routeId) ?? []), ...shapesArr]);
+      const label = gtfsIndex.routesById.get(routeId)?.route_short_name;
+      if (label && label !== routeId) {
+        result.set(label, [...(result.get(label) ?? []), ...shapesArr]);
+      }
     }
     return result;
   }, [gtfsIndex, isCabaSubte]);

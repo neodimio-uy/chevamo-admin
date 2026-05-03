@@ -255,7 +255,8 @@ function LiveMapInner({
                 title={`Línea ${lineLabel}`}
                 onClick={() => {
                   setSelected({ kind: "vehicle", vehicle: v });
-                  setSelectedLineLabel(lineLabel);
+                  // Priorizar route_id (matching exacto con shapes); fallback a label.
+                  setSelectedLineLabel(v.trip?.routeId || lineLabel);
                 }}
               />
             );
@@ -334,13 +335,29 @@ function getSelectedPosition(f: SelectedFeature): google.maps.LatLngLiteral {
 }
 
 function SelectedPopup({ feature }: { feature: SelectedFeature }) {
+  const wrap = (content: React.ReactNode) => (
+    <div
+      style={{
+        fontSize: 13,
+        lineHeight: 1.5,
+        padding: 4,
+        minWidth: 180,
+        color: "#111",
+      }}
+    >
+      {content}
+    </div>
+  );
+
   switch (feature.kind) {
     case "bus": {
       const b = feature.bus;
       const speedKmh =
-        b.speed !== null && b.speed !== undefined ? (b.speed * 3.6).toFixed(0) : null;
-      return (
-        <div style={{ fontSize: 12, lineHeight: 1.5 }}>
+        b.speed !== null && b.speed !== undefined
+          ? (b.speed * 3.6).toFixed(0)
+          : null;
+      return wrap(
+        <>
           <strong>Línea {b.line}</strong> · {b.company}
           <br />
           ID: <code>{b.id}</code>
@@ -377,7 +394,7 @@ function SelectedPopup({ feature }: { feature: SelectedFeature }) {
           >
             Ver línea →
           </a>
-        </div>
+        </>
       );
     }
     case "vehicle": {
@@ -387,12 +404,13 @@ function SelectedPopup({ feature }: { feature: SelectedFeature }) {
         v.position.speed !== null && v.position.speed !== undefined
           ? (v.position.speed * 3.6).toFixed(0)
           : null;
-      return (
-        <div style={{ fontSize: 12, lineHeight: 1.5 }}>
+      const idShort = v.id.split(":").pop() ?? v.id;
+      return wrap(
+        <>
           <strong>Línea {lineLabel}</strong>
           {v.agency?.name && <> · {v.agency.name}</>}
           <br />
-          ID: <code>{v.id.split(":").pop()}</code>
+          ID: <code>{idShort}</code>
           {v.trip?.headsign && (
             <>
               <br />→ {v.trip.headsign}
@@ -404,13 +422,13 @@ function SelectedPopup({ feature }: { feature: SelectedFeature }) {
               {speedKmh} km/h
             </>
           )}
-        </div>
+        </>
       );
     }
     case "community": {
       const cb = feature.bus;
-      return (
-        <div style={{ fontSize: 12, lineHeight: 1.5 }}>
+      return wrap(
+        <>
           <strong>Línea {cb.line}</strong> · {cb.company}
           <br />
           <span style={{ color: "#a855f7", fontWeight: 600 }}>
@@ -423,13 +441,13 @@ function SelectedPopup({ feature }: { feature: SelectedFeature }) {
           )}
           <br />
           {(cb.speed * 3.6).toFixed(0)} km/h
-        </div>
+        </>
       );
     }
     case "stop": {
       const s = feature.stop;
-      return (
-        <div style={{ fontSize: 12, lineHeight: 1.5 }}>
+      return wrap(
+        <>
           <strong>#{s.id}</strong>
           <br />
           {s.street1 && s.street2
@@ -442,13 +460,13 @@ function SelectedPopup({ feature }: { feature: SelectedFeature }) {
           >
             Editar →
           </a>
-        </div>
+        </>
       );
     }
     case "gtfs-stop": {
       const s = feature.stop;
-      return (
-        <div style={{ fontSize: 12, lineHeight: 1.5 }}>
+      return wrap(
+        <>
           <strong>{s.stop_name}</strong>
           <br />
           ID: <code>{s.stop_id}</code>
@@ -465,7 +483,7 @@ function SelectedPopup({ feature }: { feature: SelectedFeature }) {
               </span>
             </>
           )}
-        </div>
+        </>
       );
     }
   }
