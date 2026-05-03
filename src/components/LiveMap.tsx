@@ -19,12 +19,17 @@ const DEFAULT_ZOOM = 12;
 
 const API_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
 
-/// Zoom mínimo para pintar paradas. 13 ~ barrios; 14 ~ pocas cuadras.
-const MIN_ZOOM_STOPS = 13;
-/// Zoom mínimo para pintar shapes (más caros que stops).
-const MIN_ZOOM_SHAPES = 12;
+/// Zoom mínimo para pintar paradas. 14 = pocas cuadras (carga manejable).
+const MIN_ZOOM_STOPS = 14;
+/// Recorridos visibles desde zoom de ciudad.
+const MIN_ZOOM_SHAPES = 11;
+/// Zoom mínimo para pintar vehicles (Marker legacy es caro a 3k+ unidades).
+const MIN_ZOOM_VEHICLES = 11;
 /// Subte CABA tiene 16 shapes — render entero sin importar zoom.
 const SUBTE_ALWAYS_RENDER = true;
+const CAP_STOPS = 800;
+const CAP_SHAPES = 800;
+const CAP_VEHICLES = 1200;
 
 interface LiveMapProps {
   // Legacy Mvd (feed IMM enriquecido)
@@ -139,12 +144,28 @@ function LiveMapInner({
 
   const filteredVehicles = useMemo(() => {
     const arr = Array.isArray(vehicles) ? vehicles : [];
-    return arr.filter((v) => {
+    if (arr.length === 0) return [];
+    if (viewport.bounds && viewport.zoom < MIN_ZOOM_VEHICLES) return [];
+    const out: TransitVehicle[] = [];
+    const b = viewport.bounds;
+    for (const v of arr) {
       const lineLabel = v.trip?.routeShortName || v.displayLabel || "";
-      if (lineFilter && lineLabel !== lineFilter) return false;
-      return true;
-    });
-  }, [vehicles, lineFilter]);
+      if (lineFilter && lineLabel !== lineFilter) continue;
+      if (b) {
+        if (
+          v.position.lat > b.north ||
+          v.position.lat < b.south ||
+          v.position.lng > b.east ||
+          v.position.lng < b.west
+        ) {
+          continue;
+        }
+      }
+      out.push(v);
+      if (out.length >= CAP_VEHICLES) break;
+    }
+    return out;
+  }, [vehicles, lineFilter, viewport]);
 
   // Pre-compute bbox de cada shape (una sola vez por dataset).
   const shapesIndexed = useMemo<ShapeWithBbox[]>(() => {
@@ -172,7 +193,7 @@ function LiveMapInner({
         s.stop_lon >= b.west
       ) {
         out.push(s);
-        if (out.length >= 1500) break;
+        if (out.length >= CAP_STOPS) break;
       }
     }
     return out;
@@ -191,7 +212,7 @@ function LiveMapInner({
     for (const s of shapesIndexed) {
       if (bboxIntersects(s.bbox, b)) {
         out.push(s.shape);
-        if (out.length >= 800) break;
+        if (out.length >= CAP_SHAPES) break;
       }
     }
     return out;
