@@ -272,8 +272,12 @@ function LiveMapInner({
                 title={`Línea ${lineLabel}`}
                 onClick={() => {
                   setSelected({ kind: "vehicle", vehicle: v });
-                  // Priorizar route_id (matching exacto con shapes); fallback a label.
-                  setSelectedLineLabel(v.trip?.routeId || lineLabel);
+                  // Priorizar route_short_name: el feed RT manda routeId que
+                  // NO matchea con el GTFS estático de CABA, pero
+                  // routeShortName SÍ matchea con routes.txt.
+                  setSelectedLineLabel(
+                    v.trip?.routeShortName || v.trip?.routeId || lineLabel
+                  );
                 }}
               />
             );
