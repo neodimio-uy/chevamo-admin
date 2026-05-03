@@ -11,7 +11,9 @@ import {
   useApiIsLoaded,
 } from "@vis.gl/react-google-maps";
 
-const MAP_ID = "55485134b8581ceea8353751";
+// Map ID via env var (opcional). Sin Map ID, AdvancedMarker funciona en
+// fallback (warning en consola pero no rompe el mapa).
+const MAP_ID = process.env.NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID;
 import type { Bus, BusStop } from "@/lib/types";
 import { COMPANY_COLORS } from "@/lib/types";
 import type { CommunityBus } from "@/hooks/useCommunityBuses";
@@ -183,7 +185,7 @@ function LiveMapInner({
   return (
     <Map
       key={`${center[0]},${center[1]},${zoom}`}
-      mapId={MAP_ID}
+      {...(MAP_ID ? { mapId: MAP_ID } : {})}
       defaultCenter={{ lat: center[0], lng: center[1] }}
       defaultZoom={zoom}
       defaultTilt={0}
