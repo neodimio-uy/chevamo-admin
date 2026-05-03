@@ -165,6 +165,21 @@ export default function MapPage() {
     return result;
   }, [gtfsIndex, isCabaSubte]);
 
+  // Mapping stop_id → color (estaciones donut, solo subte).
+  const stopColors = useMemo(() => {
+    if (!gtfsIndex || !isCabaSubte) return undefined;
+    const result = new Map<string, string>();
+    for (const stop of gtfsIndex.snapshot.stops) {
+      const routes = gtfsIndex.routesByStop.get(stop.stop_id);
+      if (!routes || routes.size === 0) continue;
+      const firstRouteId = routes.values().next().value as string;
+      const route = gtfsIndex.routesById.get(firstRouteId);
+      const color = subteColorForLine(route?.route_short_name);
+      result.set(stop.stop_id, color);
+    }
+    return result;
+  }, [gtfsIndex, isCabaSubte]);
+
   return (
     <div className="flex h-[calc(100vh-4rem)] flex-col">
       {/* Header + controles */}
@@ -262,6 +277,7 @@ export default function MapPage() {
           shapes={shapesToShow}
           shapesByLineLabel={shapesByLineLabel}
           shapeColors={shapeColors}
+          stopColors={stopColors}
           subteForecast={subteForecast}
           // Common
           showStops={showStops || isCabaSubte}  // subte: estaciones siempre visibles

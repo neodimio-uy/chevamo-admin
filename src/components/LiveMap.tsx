@@ -49,6 +49,8 @@ interface LiveMapProps {
   shapesByLineLabel?: Map<string, GtfsShape[]>;
   /** Color por shape_id (subte usa colores oficiales SBASE por línea). */
   shapeColors?: Map<string, string>;
+  /** Color por stop_id (estaciones donut blanco con anillo color línea). */
+  stopColors?: Map<string, string>;
   /** Forecast del subte para mostrar arribos en popup de estación. */
   subteForecast?: SubteForecast | null;
 
@@ -98,6 +100,7 @@ function LiveMapInner({
   shapes,
   shapesByLineLabel,
   shapeColors,
+  stopColors,
   subteForecast,
   showStops = false,
   lineFilter,
@@ -240,11 +243,16 @@ function LiveMapInner({
               const arrivals = subteForecast
                 ? countSubteArrivalsAtStop(subteForecast, s)
                 : 0;
+              const isStation = s.location_type === 1;
+              const lineColor = stopColors?.get(s.stop_id);
+              const icon = lineColor
+                ? stationRingIcon(lineColor, isStation ? 7 : 5)
+                : dotIcon("#14b8a6", isStation ? 6 : 4);
               return (
                 <Marker
                   key={`gtfs-${s.stop_id}`}
                   position={{ lat: s.stop_lat, lng: s.stop_lon }}
-                  icon={dotIcon("#14b8a6", s.location_type === 1 ? 6 : 4)}
+                  icon={icon}
                   onClick={() =>
                     setSelected({ kind: "gtfs-stop", stop: s, arrivals })
                   }
@@ -572,6 +580,22 @@ function dotIcon(color: string, size: number): google.maps.Symbol | undefined {
     fillOpacity: 0.85,
     strokeColor: "white",
     strokeWeight: 1,
+    scale: size,
+  };
+}
+
+/// Estación tipo "donut": relleno blanco + anillo del color de la línea.
+function stationRingIcon(
+  lineColor: string,
+  size: number
+): google.maps.Symbol | undefined {
+  if (typeof google === "undefined" || !google.maps) return undefined;
+  return {
+    path: google.maps.SymbolPath.CIRCLE,
+    fillColor: "#ffffff",
+    fillOpacity: 1,
+    strokeColor: lineColor,
+    strokeWeight: 3,
     scale: size,
   };
 }
