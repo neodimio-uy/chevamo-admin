@@ -213,7 +213,7 @@ function LiveMapInner({
           {/* Paradas Mvd legacy */}
           {showStops &&
             stops.slice(0, 500).map((stop) => (
-              <AdvancedMarker
+              <AdvancedMarker clickable
                 key={`stop-${stop.id}`}
                 position={{
                   lat: stop.location.coordinates[1],
@@ -233,7 +233,7 @@ function LiveMapInner({
                 : 0;
               const isStation = s.location_type === 1;
               return (
-                <AdvancedMarker
+                <AdvancedMarker clickable
                   key={`gtfs-${s.stop_id}`}
                   position={{ lat: s.stop_lat, lng: s.stop_lon }}
                   onClick={() =>
@@ -249,7 +249,7 @@ function LiveMapInner({
           {filteredVehicles.map((v) => {
             const lineLabel = v.trip?.routeShortName || v.displayLabel || "?";
             return (
-              <AdvancedMarker
+              <AdvancedMarker clickable
                 key={`v-${v.id}`}
                 position={{ lat: v.position.lat, lng: v.position.lng }}
                 title={`Línea ${lineLabel}`}
@@ -274,7 +274,7 @@ function LiveMapInner({
 
           {/* Community buses (violeta) */}
           {communityBuses.map((cb) => (
-            <AdvancedMarker
+            <AdvancedMarker clickable
               key={`cb-${cb.id}`}
               position={{ lat: cb.lat, lng: cb.lng }}
               title={`Comunidad · Línea ${cb.line}`}
@@ -293,7 +293,7 @@ function LiveMapInner({
             if (!coords) return null;
             const color = COMPANY_COLORS[bus.company] || "#64748b";
             return (
-              <AdvancedMarker
+              <AdvancedMarker clickable
                 key={bus.id}
                 position={{ lat: coords[1], lng: coords[0] }}
                 title={`Línea ${bus.line} · ${bus.company}`}
