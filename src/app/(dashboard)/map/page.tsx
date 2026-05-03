@@ -10,6 +10,7 @@ import { useGtfsSnapshot } from "@/hooks/useGtfsSnapshot";
 import { useCity } from "@/lib/cityContext";
 import { getBusStops } from "@/lib/api";
 import type { BusStop } from "@/lib/types";
+import { subteColorForLine } from "@/lib/subteColors";
 import { COMPANIES, COMPANY_COLORS } from "@/lib/types";
 
 // Leaflet no soporta SSR; lo cargamos solo en cliente.
@@ -150,6 +151,20 @@ export default function MapPage() {
     return result;
   }, [gtfsIndex, isCabaSubte]);
 
+  // Mapping shape_id → color SBASE (solo subte).
+  const shapeColors = useMemo(() => {
+    if (!gtfsIndex || !isCabaSubte) return undefined;
+    const result = new Map<string, string>();
+    for (const [routeId, shapesArr] of gtfsIndex.shapesByRoute) {
+      const route = gtfsIndex.routesById.get(routeId);
+      const color = subteColorForLine(route?.route_short_name);
+      for (const shape of shapesArr) {
+        result.set(String(shape.shape_id), color);
+      }
+    }
+    return result;
+  }, [gtfsIndex, isCabaSubte]);
+
   return (
     <div className="flex h-[calc(100vh-4rem)] flex-col">
       {/* Header + controles */}
@@ -246,6 +261,7 @@ export default function MapPage() {
           onlyParentStations={isCabaSubte}
           shapes={shapesToShow}
           shapesByLineLabel={shapesByLineLabel}
+          shapeColors={shapeColors}
           subteForecast={subteForecast}
           // Common
           showStops={showStops || isCabaSubte}  // subte: estaciones siempre visibles

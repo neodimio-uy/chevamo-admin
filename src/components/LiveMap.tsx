@@ -47,6 +47,8 @@ interface LiveMapProps {
   shapes?: GtfsShape[];
   /** Mapping `route_short_name` → shapes. Mostrados solo cuando user clickea bus/vehicle. */
   shapesByLineLabel?: Map<string, GtfsShape[]>;
+  /** Color por shape_id (subte usa colores oficiales SBASE por línea). */
+  shapeColors?: Map<string, string>;
   /** Forecast del subte para mostrar arribos en popup de estación. */
   subteForecast?: SubteForecast | null;
 
@@ -95,6 +97,7 @@ function LiveMapInner({
   onlyParentStations,
   shapes,
   shapesByLineLabel,
+  shapeColors,
   subteForecast,
   showStops = false,
   lineFilter,
@@ -205,7 +208,13 @@ function LiveMapInner({
 
       {/* Recorridos (shapes GTFS) — filtrados por viewport+zoom */}
       {visibleShapes.map((shape) => (
-        <ShapePolyline key={`shape-${shape.shape_id}`} shape={shape} />
+        <ShapePolyline
+          key={`shape-${shape.shape_id}`}
+          shape={shape}
+          color={shapeColors?.get(String(shape.shape_id))}
+          weight={onlyParentStations ? 4 : 3}
+          opacity={onlyParentStations ? 0.85 : 0.7}
+        />
       ))}
 
       {/* Markers requieren google.maps.SymbolPath / Point — solo después de api loaded */}
@@ -523,7 +532,17 @@ function ViewportTracker({
 
 /// Polyline que vive como side-effect en el mapa (Google Maps no expone un
 /// componente declarativo en @vis.gl/react-google-maps todavía).
-function ShapePolyline({ shape }: { shape: GtfsShape }) {
+function ShapePolyline({
+  shape,
+  color = "#0ea5e9",
+  weight = 3,
+  opacity = 0.7,
+}: {
+  shape: GtfsShape;
+  color?: string;
+  weight?: number;
+  opacity?: number;
+}) {
   const map = useMap();
   useEffect(() => {
     if (!map) return;
@@ -534,13 +553,13 @@ function ShapePolyline({ shape }: { shape: GtfsShape }) {
     const polyline = new google.maps.Polyline({
       path,
       geodesic: false,
-      strokeColor: "#0ea5e9",
-      strokeOpacity: 0.55,
-      strokeWeight: 3,
+      strokeColor: color,
+      strokeOpacity: opacity,
+      strokeWeight: weight,
       map,
     });
     return () => polyline.setMap(null);
-  }, [map, shape]);
+  }, [map, shape, color, weight, opacity]);
   return null;
 }
 
