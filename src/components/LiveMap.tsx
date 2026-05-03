@@ -4,11 +4,14 @@ import { useEffect, useMemo, useState } from "react";
 import {
   APIProvider,
   Map,
-  Marker,
+  AdvancedMarker,
+  Pin,
   InfoWindow,
   useMap,
   useApiIsLoaded,
 } from "@vis.gl/react-google-maps";
+
+const MAP_ID = "55485134b8581ceea8353751";
 import type { Bus, BusStop } from "@/lib/types";
 import { COMPANY_COLORS } from "@/lib/types";
 import type { CommunityBus } from "@/hooks/useCommunityBuses";
@@ -221,8 +224,13 @@ function LiveMapInner({
   return (
     <Map
       key={`${center[0]},${center[1]},${zoom}`}
+      mapId={MAP_ID}
       defaultCenter={{ lat: center[0], lng: center[1] }}
       defaultZoom={zoom}
+      defaultTilt={45}
+      defaultHeading={0}
+      tiltInteractionEnabled
+      headingInteractionEnabled
       className="h-full w-full overflow-hidden rounded-2xl"
       gestureHandling="greedy"
       disableDefaultUI={false}
@@ -230,10 +238,8 @@ function LiveMapInner({
       streetViewControl={false}
       mapTypeControl={false}
       fullscreenControl={false}
+      rotateControl={false}
       clickableIcons={false}
-      // defaultCenter/defaultZoom (uncontrolled): el user mueve libremente, el
-      // mapa NO se reposiciona en cada render del padre. `key` fuerza re-mount
-      // cuando cambia la ciudad (vía nuevo defaultCenter/defaultZoom).
     >
       <ViewportTracker onChange={setViewport} />
 
@@ -248,15 +254,16 @@ function LiveMapInner({
           {/* Paradas Mvd legacy */}
           {showStops &&
             stops.slice(0, 500).map((stop) => (
-              <Marker
+              <AdvancedMarker
                 key={`stop-${stop.id}`}
                 position={{
                   lat: stop.location.coordinates[1],
                   lng: stop.location.coordinates[0],
                 }}
-                icon={dotIcon("#94a3b8", 4)}
                 onClick={() => setSelected({ kind: "stop", stop })}
-              />
+              >
+                <StopDot color="#94a3b8" size={8} />
+              </AdvancedMarker>
             ))}
 
           {/* Paradas/estaciones GTFS multi-city */}
@@ -265,15 +272,17 @@ function LiveMapInner({
               const arrivals = subteForecast
                 ? countSubteArrivalsAtStop(subteForecast, s)
                 : 0;
+              const isStation = s.location_type === 1;
               return (
-                <Marker
+                <AdvancedMarker
                   key={`gtfs-${s.stop_id}`}
                   position={{ lat: s.stop_lat, lng: s.stop_lon }}
-                  icon={dotIcon("#14b8a6", s.location_type === 1 ? 6 : 4)}
                   onClick={() =>
                     setSelected({ kind: "gtfs-stop", stop: s, arrivals })
                   }
-                />
+                >
+                  <StopDot color="#14b8a6" size={isStation ? 12 : 8} />
+                </AdvancedMarker>
               );
             })}
 
@@ -281,26 +290,36 @@ function LiveMapInner({
           {filteredVehicles.map((v) => {
             const lineLabel = v.trip?.routeShortName || v.displayLabel || "?";
             return (
-              <Marker
+              <AdvancedMarker
                 key={`v-${v.id}`}
                 position={{ lat: v.position.lat, lng: v.position.lng }}
-                icon={busIcon("#475569")}
-                label={busLabel(lineLabel)}
                 title={`Línea ${lineLabel}`}
                 onClick={() => setSelected({ kind: "vehicle", vehicle: v })}
-              />
+              >
+                <Pin
+                  background="#475569"
+                  borderColor="#fff"
+                  glyphColor="#fff"
+                  scale={0.85}
+                >
+                  <span style={{ fontSize: 10, fontWeight: 700 }}>
+                    {lineLabel}
+                  </span>
+                </Pin>
+              </AdvancedMarker>
             );
           })}
 
           {/* Community buses (violeta) */}
           {communityBuses.map((cb) => (
-            <Marker
+            <AdvancedMarker
               key={`cb-${cb.id}`}
               position={{ lat: cb.lat, lng: cb.lng }}
-              icon={dotIcon("#a855f7", 8)}
               title={`Comunidad · Línea ${cb.line}`}
               onClick={() => setSelected({ kind: "community", bus: cb })}
-            />
+            >
+              <StopDot color="#a855f7" size={14} />
+            </AdvancedMarker>
           ))}
 
           {/* Buses Mvd oficiales */}
@@ -309,14 +328,23 @@ function LiveMapInner({
             if (!coords) return null;
             const color = COMPANY_COLORS[bus.company] || "#64748b";
             return (
-              <Marker
+              <AdvancedMarker
                 key={bus.id}
                 position={{ lat: coords[1], lng: coords[0] }}
-                icon={busIcon(color)}
-                label={busLabel(bus.line)}
                 title={`Línea ${bus.line} · ${bus.company}`}
                 onClick={() => setSelected({ kind: "bus", bus })}
-              />
+              >
+                <Pin
+                  background={color}
+                  borderColor="#fff"
+                  glyphColor="#fff"
+                  scale={0.85}
+                >
+                  <span style={{ fontSize: 10, fontWeight: 700 }}>
+                    {bus.line}
+                  </span>
+                </Pin>
+              </AdvancedMarker>
             );
           })}
 
@@ -548,40 +576,20 @@ function ShapePolyline({ shape }: { shape: GtfsShape }) {
   return null;
 }
 
-function dotIcon(color: string, size: number): google.maps.Symbol | undefined {
-  if (typeof google === "undefined" || !google.maps) return undefined;
-  return {
-    path: google.maps.SymbolPath.CIRCLE,
-    fillColor: color,
-    fillOpacity: 0.85,
-    strokeColor: "white",
-    strokeWeight: 1,
-    scale: size,
-  };
-}
-
-function busIcon(color: string): google.maps.Symbol | undefined {
-  if (typeof google === "undefined" || !google.maps) return undefined;
-  return {
-    path: "M -12,-9 L 12,-9 Q 16,-9 16,-5 L 16,5 Q 16,9 12,9 L -12,9 Q -16,9 -16,5 L -16,-5 Q -16,-9 -12,-9 Z",
-    fillColor: color,
-    fillOpacity: 1,
-    strokeColor: "white",
-    strokeWeight: 2,
-    scale: 1,
-    anchor: new google.maps.Point(0, 0),
-    labelOrigin: new google.maps.Point(0, 0),
-  };
-}
-
-function busLabel(line: string): google.maps.MarkerLabel {
-  return {
-    text: line,
-    color: "white",
-    fontSize: "11px",
-    fontWeight: "700",
-    fontFamily: "system-ui, sans-serif",
-  };
+/// Punto circular para paradas (children de AdvancedMarker, render en GPU).
+function StopDot({ color, size }: { color: string; size: number }) {
+  return (
+    <div
+      style={{
+        width: size,
+        height: size,
+        borderRadius: "50%",
+        background: color,
+        border: "1px solid white",
+        boxShadow: "0 1px 2px rgba(0,0,0,0.2)",
+      }}
+    />
+  );
 }
 
 function countSubteArrivalsAtStop(

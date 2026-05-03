@@ -153,8 +153,9 @@ export async function getSubteForecast(): Promise<SubteForecast> {
 // GTFS snapshots públicos en GCS — descarga directa, sin auth.
 // ─────────────────────────────────────────────────────────────────────────────
 
-const GCS_SNAPSHOTS_BASE =
-  "https://storage.googleapis.com/vamo-dbad6.firebasestorage.app/gtfs-snapshots";
+// Cloud CDN delante del bucket Firebase Storage. Reduce latencia ~10x para
+// usuarios LATAM. Cache-control max-age=3600 + serveWhileStale 86400.
+const GCS_SNAPSHOTS_BASE = "https://chevamo.com.uy/gtfs-snapshots";
 
 export interface GtfsStop {
   stop_id: string;
