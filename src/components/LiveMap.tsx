@@ -186,10 +186,10 @@ function LiveMapInner({
       mapId={MAP_ID}
       defaultCenter={{ lat: center[0], lng: center[1] }}
       defaultZoom={zoom}
-      defaultTilt={45}
+      defaultTilt={0}
       defaultHeading={0}
-      tiltInteractionEnabled
-      headingInteractionEnabled
+      tiltInteractionEnabled={false}
+      headingInteractionEnabled={false}
       className="h-full w-full overflow-hidden rounded-2xl"
       gestureHandling="greedy"
       disableDefaultUI={false}
