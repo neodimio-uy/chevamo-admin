@@ -127,26 +127,29 @@ export default function MapPage() {
   const lastUpd = isMvdLegacy ? lastUpdate : lastFetchVeh;
   const errMsg = isMvdLegacy ? error : vehError;
 
-  // Shapes a dibujar:
-  //   - Subte: TODOS los shapes (son 16, render entero)
-  //   - Colectivos CABA / Mvd: solo si hay filtro de línea (~10 shapes)
+  // Shapes "siempre visibles" — solo subte (16 lines, render entero).
   const shapesToShow = useMemo(() => {
     if (!gtfsIndex) return [];
     if (isCabaSubte) return gtfsIndex.snapshot.shapes;
-    if (filteredLine) {
-      const matchingRouteIds: string[] = [];
-      for (const r of gtfsIndex.routesById.values()) {
-        if (r.route_short_name === filteredLine) matchingRouteIds.push(r.route_id);
-      }
-      const out = [];
-      for (const rid of matchingRouteIds) {
-        const arr = gtfsIndex.shapesByRoute.get(rid);
-        if (arr) out.push(...arr);
-      }
-      return out;
-    }
     return [];
-  }, [gtfsIndex, isCabaSubte, filteredLine]);
+  }, [gtfsIndex, isCabaSubte]);
+
+  // Mapping route_short_name → shapes. Para colectivos/buses, el LiveMap
+  // muestra shapes solo cuando user clickea una unidad (1-3 polylines).
+  // Si el operador filtra por línea en el input, el LiveMap recibe el filter
+  // via `lineFilter` y igual el click muestra el shape.
+  const shapesByLineLabel = useMemo(() => {
+    if (!gtfsIndex || isCabaSubte) return undefined;
+    const result = new Map<string, typeof gtfsIndex.snapshot.shapes>();
+    for (const [routeId, shapesArr] of gtfsIndex.shapesByRoute) {
+      const route = gtfsIndex.routesById.get(routeId);
+      const label = route?.route_short_name;
+      if (!label) continue;
+      const existing = result.get(label) ?? [];
+      result.set(label, [...existing, ...shapesArr]);
+    }
+    return result;
+  }, [gtfsIndex, isCabaSubte]);
 
   return (
     <div className="flex h-[calc(100vh-4rem)] flex-col">
@@ -243,6 +246,7 @@ export default function MapPage() {
           gtfsStops={gtfsIndex ? Array.from(gtfsIndex.stopsById.values()) : []}
           onlyParentStations={isCabaSubte}
           shapes={shapesToShow}
+          shapesByLineLabel={shapesByLineLabel}
           subteForecast={subteForecast}
           // Common
           showStops={showStops || isCabaSubte}  // subte: estaciones siempre visibles

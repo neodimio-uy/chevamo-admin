@@ -24,14 +24,11 @@ const API_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
 
 /// Zoom mínimo para pintar paradas. 14 = pocas cuadras (carga manejable).
 const MIN_ZOOM_STOPS = 14;
-/// Recorridos visibles desde zoom de ciudad.
-const MIN_ZOOM_SHAPES = 11;
-/// Zoom mínimo para pintar vehicles (Marker legacy es caro a 3k+ unidades).
+/// Zoom mínimo para pintar vehicles.
 const MIN_ZOOM_VEHICLES = 11;
-/// Subte CABA tiene 16 shapes — render entero sin importar zoom.
+/// Subte CABA: 16 shapes siempre visibles (son pocas).
 const SUBTE_ALWAYS_RENDER = true;
 const CAP_STOPS = 800;
-const CAP_SHAPES = 800;
 const CAP_VEHICLES = 1200;
 
 interface LiveMapProps {
@@ -45,7 +42,10 @@ interface LiveMapProps {
   gtfsStops?: GtfsStop[];
   /** Para subte: solo `location_type=1` (estaciones agrupadoras). */
   onlyParentStations?: boolean;
+  /** Shapes siempre visibles (sólo subte usa esto). */
   shapes?: GtfsShape[];
+  /** Mapping `route_short_name` → shapes. Mostrados solo cuando user clickea bus/vehicle. */
+  shapesByLineLabel?: Map<string, GtfsShape[]>;
   /** Forecast del subte para mostrar arribos en popup de estación. */
   subteForecast?: SubteForecast | null;
 
@@ -68,35 +68,6 @@ type SelectedFeature =
 interface Viewport {
   bounds: { north: number; south: number; east: number; west: number } | null;
   zoom: number;
-}
-
-interface ShapeWithBbox {
-  shape: GtfsShape;
-  bbox: { north: number; south: number; east: number; west: number };
-}
-
-function shapeBbox(shape: GtfsShape): ShapeWithBbox["bbox"] {
-  let north = -90, south = 90, east = -180, west = 180;
-  for (const p of shape.points) {
-    if (p.length < 2) continue;
-    const [lat, lng] = p;
-    if (lat > north) north = lat;
-    if (lat < south) south = lat;
-    if (lng > east) east = lng;
-    if (lng < west) west = lng;
-  }
-  return { north, south, east, west };
-}
-
-function bboxIntersects(
-  a: { north: number; south: number; east: number; west: number },
-  b: { north: number; south: number; east: number; west: number }
-): boolean {
-  if (a.east < b.west) return false;
-  if (a.west > b.east) return false;
-  if (a.north < b.south) return false;
-  if (a.south > b.north) return false;
-  return true;
 }
 
 export default function LiveMap(props: LiveMapProps) {
@@ -122,6 +93,7 @@ function LiveMapInner({
   gtfsStops,
   onlyParentStations,
   shapes,
+  shapesByLineLabel,
   subteForecast,
   showStops = false,
   lineFilter,
@@ -131,6 +103,7 @@ function LiveMapInner({
 }: LiveMapProps) {
   const apiLoaded = useApiIsLoaded();
   const [selected, setSelected] = useState<SelectedFeature | null>(null);
+  const [selectedLineLabel, setSelectedLineLabel] = useState<string | null>(null);
   const [viewport, setViewport] = useState<Viewport>({
     bounds: null,
     zoom: zoom,
@@ -170,12 +143,6 @@ function LiveMapInner({
     return out;
   }, [vehicles, lineFilter, viewport]);
 
-  // Pre-compute bbox de cada shape (una sola vez por dataset).
-  const shapesIndexed = useMemo<ShapeWithBbox[]>(() => {
-    const arr = Array.isArray(shapes) ? shapes : [];
-    return arr.map((shape) => ({ shape, bbox: shapeBbox(shape) }));
-  }, [shapes]);
-
   // Stops visibles por viewport+zoom (subte siempre muestra estaciones).
   const visibleStops = useMemo(() => {
     const arr = Array.isArray(gtfsStops) ? gtfsStops : [];
@@ -202,24 +169,16 @@ function LiveMapInner({
     return out;
   }, [gtfsStops, onlyParentStations, viewport]);
 
-  // Shapes visibles por viewport+zoom (subte siempre).
-  const visibleShapes = useMemo(() => {
-    if (shapesIndexed.length === 0) return [];
-    if (onlyParentStations && SUBTE_ALWAYS_RENDER) {
-      return shapesIndexed.map((s) => s.shape);
+  // Shapes visibles: subte siempre todas; bus/colectivo solo la línea seleccionada.
+  const visibleShapes = useMemo<GtfsShape[]>(() => {
+    if (onlyParentStations && SUBTE_ALWAYS_RENDER && Array.isArray(shapes)) {
+      return shapes;
     }
-    if (!viewport.bounds) return [];
-    if (viewport.zoom < MIN_ZOOM_SHAPES) return [];
-    const b = viewport.bounds;
-    const out: GtfsShape[] = [];
-    for (const s of shapesIndexed) {
-      if (bboxIntersects(s.bbox, b)) {
-        out.push(s.shape);
-        if (out.length >= CAP_SHAPES) break;
-      }
+    if (selectedLineLabel && shapesByLineLabel) {
+      return shapesByLineLabel.get(selectedLineLabel) ?? [];
     }
-    return out;
-  }, [shapesIndexed, viewport, onlyParentStations]);
+    return [];
+  }, [shapes, shapesByLineLabel, selectedLineLabel, onlyParentStations]);
 
   return (
     <Map
@@ -294,7 +253,10 @@ function LiveMapInner({
                 key={`v-${v.id}`}
                 position={{ lat: v.position.lat, lng: v.position.lng }}
                 title={`Línea ${lineLabel}`}
-                onClick={() => setSelected({ kind: "vehicle", vehicle: v })}
+                onClick={() => {
+                  setSelected({ kind: "vehicle", vehicle: v });
+                  setSelectedLineLabel(lineLabel);
+                }}
               >
                 <Pin
                   background="#475569"
@@ -316,7 +278,10 @@ function LiveMapInner({
               key={`cb-${cb.id}`}
               position={{ lat: cb.lat, lng: cb.lng }}
               title={`Comunidad · Línea ${cb.line}`}
-              onClick={() => setSelected({ kind: "community", bus: cb })}
+              onClick={() => {
+                setSelected({ kind: "community", bus: cb });
+                setSelectedLineLabel(cb.line);
+              }}
             >
               <StopDot color="#a855f7" size={14} />
             </AdvancedMarker>
@@ -332,7 +297,10 @@ function LiveMapInner({
                 key={bus.id}
                 position={{ lat: coords[1], lng: coords[0] }}
                 title={`Línea ${bus.line} · ${bus.company}`}
-                onClick={() => setSelected({ kind: "bus", bus })}
+                onClick={() => {
+                  setSelected({ kind: "bus", bus });
+                  setSelectedLineLabel(bus.line);
+                }}
               >
                 <Pin
                   background={color}
@@ -351,7 +319,10 @@ function LiveMapInner({
           {selected && (
             <InfoWindow
               position={getSelectedPosition(selected)}
-              onCloseClick={() => setSelected(null)}
+              onCloseClick={() => {
+                setSelected(null);
+                setSelectedLineLabel(null);
+              }}
             >
               <SelectedPopup feature={selected} />
             </InfoWindow>
