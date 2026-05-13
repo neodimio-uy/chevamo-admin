@@ -36,7 +36,7 @@ export default function HealthPage() {
 
       {/* ━━━ Backend status ━━━ */}
       <section className="rounded-2xl border border-border bg-bg-card p-5">
-        <h2 className="text-sm font-bold text-text mb-3">Backend (mvd-proxy)</h2>
+        <h2 className="text-sm font-bold text-text mb-3">Backend (chevamo-backend)</h2>
         <div className="grid grid-cols-3 gap-4">
           <Stat
             label="Estado"

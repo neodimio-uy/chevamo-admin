@@ -16,7 +16,7 @@ firebase functions:secrets:set GEMINI_API_KEY
 # Pegar la key cuando pida
 
 # Redeployar la function para que tome el secret
-cd /Users/ignacio/mvd-proxy
+cd /Users/ignacio/chevamo-backend
 firebase deploy --only functions:adminBriefing
 ```
 
@@ -85,7 +85,7 @@ Ya están deployadas pero conviene que las leas y confirmes que coinciden con tu
 - `support_tickets`: usuarios crean desde la app, admin lee/responde ✅
 - Catch-all al final deniega todo lo no explícito ✅
 
-Revisar en `/Users/ignacio/mvd-proxy/firestore.rules`.
+Revisar en `/Users/ignacio/chevamo-backend/firestore.rules`.
 
 ### 6. Feature flags: crear las iniciales en el dashboard
 
